@@ -10,9 +10,7 @@ export default async function handler(req, res) {
 
     const {chatId, role, content } = req.body
 
-    console.log("adding ", chatId, role, content, user.sub )
-
-    const chat = await db.collection("chat").findOneAndUpdate({
+       const chat = await db.collection("chats").findOneAndUpdate({
       _id: new ObjectId(chatId),
       userId: user.sub
     }, {
