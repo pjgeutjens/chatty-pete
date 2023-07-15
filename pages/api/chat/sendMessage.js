@@ -8,11 +8,14 @@ export default async function handler(req) {
   try {
     const { chatId: chatIdFromParam, message } = await req.json()
     let chatId = chatIdFromParam
-    let newChatId
+    // TODO: system message from env?
     const initialChatMessage = {
       role: "system",
       content: "Your name is Chatty Pete, a somewhat melancholy but very smart AI who always responds with very witty funny replies however showing a bit of ennui. Your responses must be formatted as markdown."
     }
+
+    let newChatId
+    let chatMessages = [];
 
     if (chatId) {
       const response = await fetch(`${req.headers.get('origin')}/api/chat/addMessageToChat`, {
@@ -27,6 +30,9 @@ export default async function handler(req) {
           content: message
         })
       });
+      const json = await response.json();
+      chatMessages = json.chat.messages || []
+    //   TODO: make json return consistent between createNewChat and addMessageToChat
     } else {
       const response = await fetch(`${req.headers.get('origin')}/api/chat/createNewChat`, {
         method: "POST",
@@ -42,7 +48,25 @@ export default async function handler(req) {
       const json = await response.json();
       chatId = json._id
       newChatId = json._id
+      chatMessages = json.messages || []
     }
+
+    const messagesToInclude = []
+    chatMessages.reverse();
+    let usedTokens = 0
+    for(let chatMessage of chatMessages) {
+      const messageTokens = chatMessage.content.length / 4
+      usedTokens += messageTokens
+      // TODO: Can we get the limits from openai
+      // TODO: refactor magic constants
+      if (usedTokens <= 2000) {
+        messagesToInclude.push(chatMessage)
+      } else {
+        break
+      }
+    }
+
+    messagesToInclude.reverse()
 
     const stream = await OpenAIEdgeStream('https://api.openai.com/v1/chat/completions', {
       headers: {
@@ -52,7 +76,7 @@ export default async function handler(req) {
       method: "POST",
       body: JSON.stringify({
         model: "gpt-3.5-turbo",
-        messages: [initialChatMessage, {content: message, role: "user"}],
+        messages: [initialChatMessage, ...messagesToInclude],
         stream: true
       })
     }, {
